@@ -34,6 +34,9 @@ trap stop_cmd_6 SIGKILL
 
 if [[ -z "${@}" ]]; then
 	echo "Loading persistent users"
+	/usr/sbin/avahi-daemon -f
+	
+	echo "Loading persistent users"
 	/usr/local/bin/user-management --load-persistent-users
 	if ! [[ -f /etc/cups/cupsd.conf ]]; then
 		cp -rpn /etc/cups-skel/* /etc/cups/
