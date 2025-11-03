@@ -1,23 +1,18 @@
-name: Build, Test and Manage Docker Image (arm64 支持)
+name: 仅构建 arm64 镜像（无测试）
 
 on:
-  workflow_dispatch:
-    inputs:
-      push:
-        description: '是否推送到 Docker Hub (true/false)'
-        required: true
-        default: 'false'
+  workflow_dispatch:  # 仅手动触发
 
 env:
-  REGISTRY: docker.io
-  IMAGE_NAME: goosews/cups
+  IMAGE_NAME: fishheadhead/cups
   SERVICE_NAME: cups  # 与 docker-compose.yml 中的服务名一致
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出代码
+        uses: actions/checkout@v4
 
       - name: 安装 docker-compose
         run: sudo apt-get update && sudo apt-get install -y docker-compose
@@ -25,43 +20,21 @@ jobs:
       - name: 配置 Docker Buildx（支持 arm64）
         uses: docker/setup-buildx-action@v3
 
-      - name: 构建 arm64 镜像（从 Dockerfile 构建）
+      - name: 从 Dockerfile 构建 cups 镜像（arm64）
         run: |
-          # 为 compose 指定构建架构
+          # 强制构建服务，不依赖外部镜像
           COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 \
           docker-compose build --no-cache --force-rm ${{ env.SERVICE_NAME }}
-          # 给构建的镜像打标签
+          
+          # 标记镜像为 arm64 架构
           docker tag ${{ env.SERVICE_NAME }}:latest ${{ env.IMAGE_NAME }}:arm64-latest
 
-      - name: 导出镜像到 tar 包
+      - name: 导出镜像为 tar 包
         run: docker save -o ${{ env.IMAGE_NAME }}-arm64.tar ${{ env.IMAGE_NAME }}:arm64-latest
 
-      - name: 保存到 Artifacts（3天）
+      - name: 保存镜像到 Artifacts（保留 3 天）
         uses: actions/upload-artifact@v4
         with:
           name: docker-image-arm64
           path: ${{ env.IMAGE_NAME }}-arm64.tar
           retention-days: 3
-
-  test:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 移除 USB 配置
-        run: |
-          grep -Ev "^    (devices:|  - \"/dev/bus/usb:/dev/bus/usb\")" "docker-compose.yaml" > "docker-compose-no-usb.yaml"
-          mv "docker-compose-no-usb.yaml" "docker-compose.yaml"
-
-      - name: 加载镜像并启动测试
-        run: |
-          docker load -i ${{ env.IMAGE_NAME }}-arm64.tar
-          # 替换 compose 中的镜像为本地构建的镜像
-          sed -i "s|image:.*|image: ${{ env.IMAGE_NAME }}:arm64-latest|g" docker-compose.yaml
-          docker-compose up -d
-          sleep 10
-          if ! docker ps | grep -q ${{ env.SERVICE_NAME }}; then
-            echo "容器启动失败"
-            exit 1
-          fi
