@@ -35,6 +35,7 @@ trap stop_cmd_6 SIGKILL
 if [[ -z "${@}" ]]; then
 	echo "Loading persistent users"
 	/usr/sbin/avahi-daemon -D
+	sleep 3
 	
 	echo "Loading persistent users"
 	/usr/local/bin/user-management --load-persistent-users
