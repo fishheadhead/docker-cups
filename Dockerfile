@@ -9,22 +9,24 @@ ARG BUILD_DATE
 # environment
 ENV ADMIN_PASSWORD=admin
 
-# install packages
-RUN apt-get update \
-  && apt-get install -y \
-  sudo \
-  cups \
-  cups-bsd \
-  cups-filters \
-  foomatic-db-compressed-ppds \
-  printer-driver-all \
-  openprinting-ppds \
-  hpijs-ppds \
-  hp-ppd \
-  hplip \
-  dumb-init \
-  && apt-get clean \
-  && rm -rf /var/lib/apt/lists/*
+# install packages (每行一个包，分步安装并检查错误)
+RUN apt-get update
+
+# 逐个安装并检查，失败时输出具体包名
+RUN apt-get install -y sudo || { echo "安装失败：sudo"; exit 1; }
+RUN apt-get install -y cups || { echo "安装失败：cups"; exit 1; }
+RUN apt-get install -y cups-bsd || { echo "安装失败：cups-bsd"; exit 1; }
+RUN apt-get install -y cups-filters || { echo "安装失败：cups-filters"; exit 1; }
+RUN apt-get install -y foomatic-db-compressed-ppds || { echo "安装失败：foomatic-db-compressed-ppds"; exit 1; }
+RUN apt-get install -y printer-driver-all || { echo "安装失败：printer-driver-all"; exit 1; }
+RUN apt-get install -y openprinting-ppds || { echo "安装失败：openprinting-ppds"; exit 1; }
+RUN apt-get install -y hpijs-ppds || { echo "安装失败：hpijs-ppds"; exit 1; }
+RUN apt-get install -y hp-ppd || { echo "安装失败：hp-ppd"; exit 1; }
+RUN apt-get install -y hplip || { echo "安装失败：hplip"; exit 1; }  # 大概率是这个包在ARM64上有问题
+RUN apt-get install -y dumb-init || { echo "安装失败：dumb-init"; exit 1; }
+
+# 清理缓存
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # add print user
 RUN adduser --home /home/admin --shell /bin/bash --gecos "admin" --disabled-password admin \
