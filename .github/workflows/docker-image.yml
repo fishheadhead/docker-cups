@@ -1,45 +1,48 @@
-name: 仅构建 arm64 镜像（无测试）
+name: Build Printer Docker Image (ARM64)
 
 on:
-  workflow_dispatch:
-
-env:
-  IMAGE_NAME: fishheadhead/cups
-  SERVICE_NAME: cups
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'Dockerfile'
+      - '.github/workflows/build-docker.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'Dockerfile'
+      - '.github/workflows/build-docker.yml'
+  workflow_dispatch:  # 保留手动触发，无需架构选择（仅arm64）
 
 jobs:
-  build:
+  build-arm64:
+    name: Build ARM64 Image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: 安装 docker-compose
-        run: sudo apt-get update && sudo apt-get install -y docker-compose
-
-      - name: 配置 Docker Buildx（支持 arm64）
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 强制构建 cups 镜像（确保从 Dockerfile 生成）
-        run: |
-          # 显式指定 compose 文件，强制构建
-          COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 \
-          docker-compose -f docker-compose.yml build --no-cache --force-rm ${{ env.SERVICE_NAME }}
+      - name: Build ARM64 Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/arm64  # 仅构建arm64架构
+          push: false  # 不推送
+          tags: printer-cups:arm64-local  # 明确的arm64标签
+          cache-from: type=gha,scope=arm64  # 单独的arm64缓存
+          cache-to: type=gha,scope=arm64,mode=max
+          # 关键：将构建的镜像导出为 tar 文件
+          outputs: type=docker,dest=/tmp/printer-cups-arm64.tar
 
-          # 验证镜像是否生成
-          if ! docker images | grep -q "${{ env.SERVICE_NAME }}:latest"; then
-            echo "❌ 镜像构建失败，未生成 ${{ env.SERVICE_NAME }}:latest"
-            exit 1
-          fi
+      - name: Compress image (减小体积)
+        run: gzip /tmp/printer-cups-arm64.tar
 
-      - name: 标记镜像为 arm64 架构
-        run: docker tag ${{ env.SERVICE_NAME }}:latest ${{ env.IMAGE_NAME }}:arm64-latest
-
-      - name: 导出镜像为 tar 包
-        run: docker save -o ${{ env.IMAGE_NAME }}-arm64.tar ${{ env.IMAGE_NAME }}:arm64-latest
-
-      - name: 保存到 Artifacts（3天）
+      - name: Upload image as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: docker-image-arm64
-          path: ${{ env.IMAGE_NAME }}-arm64.tar
-          retention-days: 3
+          name: printer-cups-arm64-image
+          path: /tmp/printer-cups-arm64.tar.gz
+          retention-days: 3  # 镜像保留 天，可按需修改
