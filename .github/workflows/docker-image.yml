@@ -11,6 +11,7 @@ on:
 env:
   REGISTRY: docker.io
   IMAGE_NAME: goosews/cups
+  SERVICE_NAME: cups  # 与 docker-compose.yml 中的服务名一致
 
 jobs:
   build:
@@ -21,19 +22,21 @@ jobs:
       - name: 安装 docker-compose
         run: sudo apt-get update && sudo apt-get install -y docker-compose
 
-      - name: 配置 Docker Buildx（支持多架构）
+      - name: 配置 Docker Buildx（支持 arm64）
         uses: docker/setup-buildx-action@v3
 
-      - name: 构建 arm64 镜像（通过 buildx 交叉编译）
+      - name: 构建 arm64 镜像（从 Dockerfile 构建）
         run: |
-          docker-compose build --no-cache --force-rm
-          # 用 buildx 确保架构标记正确
-          docker tag ${{ env.IMAGE_NAME }}:latest ${{ env.IMAGE_NAME }}:arm64-latest
+          # 为 compose 指定构建架构
+          COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 \
+          docker-compose build --no-cache --force-rm ${{ env.SERVICE_NAME }}
+          # 给构建的镜像打标签
+          docker tag ${{ env.SERVICE_NAME }}:latest ${{ env.IMAGE_NAME }}:arm64-latest
 
-      - name: 导出 arm64 镜像到 tar 包
+      - name: 导出镜像到 tar 包
         run: docker save -o ${{ env.IMAGE_NAME }}-arm64.tar ${{ env.IMAGE_NAME }}:arm64-latest
 
-      - name: 保存镜像到 Artifacts（保留 3 天）
+      - name: 保存到 Artifacts（3天）
         uses: actions/upload-artifact@v4
         with:
           name: docker-image-arm64
@@ -46,20 +49,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 移除 compose 中的 USB 设备配置
+      - name: 移除 USB 配置
         run: |
           grep -Ev "^    (devices:|  - \"/dev/bus/usb:/dev/bus/usb\")" "docker-compose.yaml" > "docker-compose-no-usb.yaml"
           mv "docker-compose-no-usb.yaml" "docker-compose.yaml"
 
-      - name: 启动容器测试（本地模拟 arm64 运行）
+      - name: 加载镜像并启动测试
         run: |
-          # 加载之前构建的 arm64 镜像
           docker load -i ${{ env.IMAGE_NAME }}-arm64.tar
-          # 启动容器
+          # 替换 compose 中的镜像为本地构建的镜像
+          sed -i "s|image:.*|image: ${{ env.IMAGE_NAME }}:arm64-latest|g" docker-compose.yaml
           docker-compose up -d
           sleep 10
-          # 验证容器运行状态
-          if ! docker ps | grep -q ${{ env.IMAGE_NAME }}; then
+          if ! docker ps | grep -q ${{ env.SERVICE_NAME }}; then
             echo "容器启动失败"
             exit 1
           fi
