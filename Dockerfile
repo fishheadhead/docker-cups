@@ -24,6 +24,8 @@ RUN apt-get install -y hpijs-ppds || { echo "安装失败：hpijs-ppds"; exit 1;
 RUN apt-get install -y hp-ppd || { echo "安装失败：hp-ppd"; exit 1; }
 RUN apt-get install -y hplip || { echo "安装失败：hplip"; exit 1; }  # 大概率是这个包在ARM64上有问题
 RUN apt-get install -y dumb-init || { echo "安装失败：dumb-init"; exit 1; }
+# 在安装依赖步骤中新增 avahi-daemon
+RUN apt-get install -y avahi-daemon || { echo "安装失败：avahi-daemon"; exit 1; }
 
 # 清理缓存
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
