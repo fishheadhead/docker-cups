@@ -1,18 +1,17 @@
 name: 仅构建 arm64 镜像（无测试）
 
 on:
-  workflow_dispatch:  # 仅手动触发
+  workflow_dispatch:
 
 env:
   IMAGE_NAME: fishheadhead/cups
-  SERVICE_NAME: cups  # 与 docker-compose.yml 中的服务名一致
+  SERVICE_NAME: cups
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: 安装 docker-compose
         run: sudo apt-get update && sudo apt-get install -y docker-compose
@@ -20,19 +19,25 @@ jobs:
       - name: 配置 Docker Buildx（支持 arm64）
         uses: docker/setup-buildx-action@v3
 
-      - name: 从 Dockerfile 构建 cups 镜像（arm64）
+      - name: 强制构建 cups 镜像（确保从 Dockerfile 生成）
         run: |
-          # 强制构建服务，不依赖外部镜像
+          # 显式指定 compose 文件，强制构建
           COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 \
-          docker-compose build --no-cache --force-rm ${{ env.SERVICE_NAME }}
-          
-          # 标记镜像为 arm64 架构
-          docker tag ${{ env.SERVICE_NAME }}:latest ${{ env.IMAGE_NAME }}:arm64-latest
+          docker-compose -f docker-compose.yml build --no-cache --force-rm ${{ env.SERVICE_NAME }}
+
+          # 验证镜像是否生成
+          if ! docker images | grep -q "${{ env.SERVICE_NAME }}:latest"; then
+            echo "❌ 镜像构建失败，未生成 ${{ env.SERVICE_NAME }}:latest"
+            exit 1
+          fi
+
+      - name: 标记镜像为 arm64 架构
+        run: docker tag ${{ env.SERVICE_NAME }}:latest ${{ env.IMAGE_NAME }}:arm64-latest
 
       - name: 导出镜像为 tar 包
         run: docker save -o ${{ env.IMAGE_NAME }}-arm64.tar ${{ env.IMAGE_NAME }}:arm64-latest
 
-      - name: 保存镜像到 Artifacts（保留 3 天）
+      - name: 保存到 Artifacts（3天）
         uses: actions/upload-artifact@v4
         with:
           name: docker-image-arm64
